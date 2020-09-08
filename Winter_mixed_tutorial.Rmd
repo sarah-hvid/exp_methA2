@@ -1,0 +1,195 @@
+---
+title: "Winter"
+author: "Sarah Hvid Andersen"
+date: "8/9/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+creating winters data
+
+```{r}
+pitch = c(233,204,242,130,112,142)
+sex = c(rep("female",3),rep("male",3))
+my.df = data.frame(sex,pitch)
+```
+
+```{r}
+xmdl = lm(pitch ~ sex, my.df)
+summary(xmdl)
+
+mean(my.df[my.df$sex=="female",]$pitch)
+```
+
+multiple r squared: variance accounted for, or explained by our predictor 'sex'. it ranges form 0-1.
+ours is high at 0.921, and thus sex explains a lot of the variance in our data. 
+
+adjusted r squared: here it is taken into account how many fixed effects we used to explain our data. 
+
+the coefficients table looks at each fixed effect individually. the p-value here is how significant
+each coeff is. intercept is always significant, as the model asks if the value is non-zero (null-model?)
+- the intercept estimate is the mean female pitch value. female because it is first alphabetically (or,        relevel())
+- sexmale estimate is the difference in the male mean from the female mean. 
+
+reporting styles:
+“We	 constructed	a	linear	model	of	 pitch	as	a	 function	 of	 sex.	This	model	
+was	significant	(F(1,4)=46.61,	p<0.01).	(…)”
+
+
+```{r}
+age = c(14,23,35,48,52,67)
+pitch = c(252,244,240,233,212,204)
+my.df = data.frame(age,pitch)
+xmdl = lm(pitch ~ age, my.df)
+summary(xmdl)
+```
+
+when using a continous variable as fixed effect.
+intercept: now represents the estimated pitch for age 0. 
+age: for every increase	of age by 1 (unit of measurement) you decrease voice pitch by 0.9099 Hertz.	
+
+meaningful intercepts:
+```{r}
+#taking the age variable and subtracting the mean from the data, the data is now mean-centered. 
+my.df$age.c = my.df$age - mean(my.df$age)
+xmdl = lm(pitch ~ age.c, my.df)
+summary(xmdl)
+```
+now the intercept is the predicted pitch at the mean age. this does not influence the model at all, but makes the intercept meaningful and interpretable. 
+
+
+assumption of the linear model: 
+1. linearity 
+- do a residual plot. if it isn't relatively linear (non-linear or curvy pattern), the assumption is violated. 
+- either transform your data, or realize that a different model should be applied. 
+
+2. absence of collinearity
+- when two fixed effects are correlated with each other, they are collinear. we don't want that. if multiple fixed effects are very similar it becomes vary hard to see which ones are playing a bigger role. they steal each others explanatory power. 
+- either drop some 'fixed effects' or conduct a principal component analysis to gather the collinear data into a new fixed effect. 
+
+3. homoskedasticity - or absence of heteroskadisticity
+- the variability of your data should be approximately equal across the range of your predicted values. it is a problem of unequal variance (hetero).
+- do a residual plot. the residual have to have a roughly similar deviation from the predicted values(center line). a good plot looks blob-like. 
+- if not, transform data. log is good. 
+
+4. normality of residuals
+- least important one, some don't even bother (winter). 
+- qq plot. 
+- transform if you must. 
+
+5. absence of influential data points. 
+- influential data points can drastically change the model. not directly considered an assumption, but important for our results none the less. 
+- check with dfbeta(). if data point 1 is excluded, the slope has to be adjusted by the right side value (if slope is negative dfbeta value is substracted, if positive it is added). eyeball values, if any are half the size of the absolute slope value, the data point is alarming. 
+- if there are influential data points, run a model with and without the points and report both results. 
+
+6. independence
+- most important assumption. more than one data point can't come from the same subject. the model becomes completely meaningless then. 
+- with repeated measures design, do mixed models. 
+
+```{r}
+plot(xmdl)
+dfbeta(xmdl)
+```
+
+
+Mixed effects models
+these allow us to use all of our data, without violating the assumption of independence. 
+
+```{r}
+library(lme4)
+politeness= read.csv("politeness_data.csv", header = T)
+
+#plot to visualize data
+boxplot(frequency ~ attitude*gender,
+col=c("white","lightgray"),politeness)
+
+#create model
+politeness.model = lmer(frequency ~ attitude +
+(1|subject) + (1|scenario), data=politeness)
+summary(politeness.model)
+```
+
+here, there are multiple hz registrations from each subject, and it therefore gets a random intercept. same goes for scenario, since each scenario has an informal and polite setting answered to them.
+
+random effects sumarizes how much variance in our model is explained by scenario and subject. residual is the error there is still left in the model. 
+fixed effects shows that to go from an informal attitude(intercept) to a polite attitude, hertz decreases by 20. here it si the average of all our data, regardless of sex, because it wasn't included in the model. thus the intercept is again quite meaningless.
+
+adding sex:
+```{r}
+politeness.model = lmer(frequency ~ attitude + gender +
+(1|subject) + (1|scenario), data=politeness)
+summary(politeness.model)
+```
+
+the intercept now represents females for the informal condition. there is a clear drop in hz to the males. 
+insight into different models with loglikelihood:
+```{r}
+#null model, reml = F is necesaary for the likelihood test. 
+politeness.null = lmer(frequency ~ gender +
+(1|subject) + (1|scenario), data=politeness,
+REML=FALSE)
+
+#with and without attitude as predictor
+politeness.model = lmer(frequency ~ attitude +
+gender + (1|subject) + (1|scenario), data=politeness,
+REML=FALSE)
+
+#anova compare th two models with each other
+anova(politeness.null,politeness.model)
+```
+report output like:
+“…	 politeness	 affected	 pitch	 (χ2(1)=11.62,	 p=0.00065),	 lowering	 it	 by	
+about	19.7 Hz	± 5.6	(standard	errors)	…”
+
+
+interaction in a model are written: *
+full	model: frequency	~	attitude*gender
+reduced	model: frequency	~	attitude	+	gender
+- this model proposes that attitude is modulated through gender. 
+
+
+random slopes:
+```{r}
+# illustrates the random intercept assigned to each subject and each scenario
+coef(politeness.model)
+
+```
+ in reality we should allow subjects to have a varying slope, because not all people are equally polite in total for example. 
+ 
+```{r}
+politeness.model = lmer(frequency ~ attitude +
+gender + (1+attitude|subject) +
+(1+attitude|scenario),
+data=politeness,
+REML=FALSE)
+
+coef(politeness.model) #there are now differing slopes
+```
+ 
+comparing this model to a null model again
+
+```{r}
+politeness.null = lmer(frequency ~ gender +
+(1+attitude|subject) + (1+attitude|scenario),
+data=politeness, REML=FALSE)
+
+anova(politeness.null,politeness.model)
+```
+
+always include random slopes when they are warranted:
+you	can	almost always	expect that	people differ	with how they	react to an	experimental manipulation! And likewise, you can almost always expect that the effect of an experimental	manipulation is	not	going	to	be the same	for	all	items.
+
+random effects and fixed effects:
+So,	a	random effect	is generally something that	can be expected to have	a	nonsystematic, idiosyncratic, unpredictable, or “random” influence on your data. In	experiments, that’s often “subject”	and “item”, and you generally want to	generalize over the	idiosyncrasies of individual subjects	and	items.
+
+Fixed	effects	on the other hand	are	expected to	have a systematic	and	predictable influence	on your	data.
+One definition of	fixed effects says that fixed effects “exhaust the population of interest”, or they	exhaust	“the levels of a factor”. Think back	of	sex.	There’s	only “male” or “female” for the	variable “gender”	in	our	study, so these are the only two levels	of this	factor. Our experiment includes	both categories	and	thus	exhaust the	category sex. With our	factor “politeness” it’s a bit	trickier.	You	could	imagine	that	there	are	more politeness levels than	just the two that we tested. But in the context	of our experiment,	we operationally defined politeness as the	difference between these two categories – and because we tested	both,	we fully “exhaust” the	factor politeness (as	defined	by us)
+
+
+report like:
+“We	used R (R Core Team, 2012) and lme4(Bates, Maechler	&	Bolker, 2012)	to perform a linear mixed effects analysis of the relationship between pitch and politeness. As fixed	effects, we	entered	politeness and gender (without	interaction	 term) into the	model. As random effects,	we had intercepts for subjects and items, as well as by-subject and by-item random slopes for the effect of politeness. Visual inspection of residual plots did not reveal any obvious deviations from homoscedasticity or normality. P-values were obtained by likelihood ratio tests of the full model with	the	effect in	question against the model without the	effect in question.”
